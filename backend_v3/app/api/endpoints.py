@@ -1,7 +1,8 @@
 import os
 import tempfile
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from ..models.response_models import TaskResponse, TaskStatusResponse, TaskStatus
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from typing import Optional
+from ..models.response_models import TaskResponse, TaskStatusResponse, TaskStatus, AnalysisParameters
 from ..tasks.audio_tasks import analyze_audio_async
 from ..celery_app import celery_app
 
@@ -11,7 +12,11 @@ ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac'}
 
 
 @router.post("/api/v3/analysis", response_model=TaskResponse)
-async def analyze_audio(file: UploadFile = File(...)):
+async def analyze_audio(
+    file: UploadFile = File(...),
+    delta: Optional[float] = Form(default=1.14),
+    wait: Optional[float] = Form(default=0.03)
+):
     if file.filename is None:
         raise HTTPException(status_code=400, detail="No filename provided")
 
@@ -26,12 +31,17 @@ async def analyze_audio(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File size too large. Maximum size: 50MB")
 
     try:
+        params = AnalysisParameters(delta=delta, wait=wait)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid parameters: {str(e)}")
+
+    try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
 
-        task = analyze_audio_async.delay(temp_file_path)
+        task = analyze_audio_async.delay(temp_file_path, delta=params.delta, wait=params.wait)
 
         return TaskResponse(
             task_id=task.id,

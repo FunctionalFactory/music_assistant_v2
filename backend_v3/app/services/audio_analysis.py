@@ -1,20 +1,20 @@
 import librosa
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 class AudioAnalysisService:
     def __init__(self, sample_rate: int = 22050):
         self.sample_rate = sample_rate
 
-    def analyze_vocal_melody(self, audio_file_path: str) -> Dict[str, Any]:
+    def analyze_vocal_melody(self, audio_file_path: str, delta: float = 1.14, wait: float = 0.03) -> Dict[str, Any]:
         y, sr = librosa.load(audio_file_path, sr=self.sample_rate)
 
         if len(y) < 2048:
             raise ValueError(f"Audio file too short for analysis. Minimum duration: {2048/sr:.2f} seconds")
 
         pitch_contour = self._extract_pitch_contour(y, sr)
-        onsets = self._extract_onsets(y, sr)
+        onsets = self._extract_onsets(y, sr, delta, wait)
         waveform = self._prepare_waveform_data(y)
         spectrogram = self._generate_spectrogram(y, sr)
         waveform_times = self._generate_time_axis(len(waveform), len(y), sr)
@@ -57,22 +57,26 @@ class AudioAnalysisService:
 
         return pitch_contour
 
-    def _extract_onsets(self, y: np.ndarray, sr: int) -> List[Dict[str, Any]]:
-        onset_frames = librosa.onset.onset_detect(
+    def _extract_onsets(self, y: np.ndarray, sr: int, delta: float = 1.14, wait: float = 0.03) -> List[Dict[str, Any]]:
+        hop_length = 512
+
+        onset_strength = librosa.onset.onset_strength(
             y=y,
             sr=sr,
-            units='frames',
-            hop_length=512,
-            backtrack=True,
-            pre_max=0.03,
-            post_max=0.01,
-            pre_avg=0.10,
-            post_avg=0.10,
-            delta=0.14,
-            wait=0.03
+            hop_length=hop_length
         )
 
-        onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=512)
+        onset_frames = librosa.util.peak_pick(
+            onset_strength,
+            pre_max=max(1, int(0.03 * sr / hop_length)),
+            post_max=max(1, int(0.01 * sr / hop_length)),
+            pre_avg=max(1, int(0.10 * sr / hop_length)),
+            post_avg=max(1, int(0.10 * sr / hop_length)),
+            delta=delta,
+            wait=max(1, int(wait * sr / hop_length))
+        )
+
+        onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop_length)
 
         onsets = []
         for onset_time in onset_times:
@@ -111,7 +115,7 @@ class AudioAnalysisService:
         else:
             downsampled = y
 
-        return downsampled.tolist()
+        return [float(x) for x in downsampled.tolist()]
 
     def _generate_spectrogram(self, y: np.ndarray, sr: int) -> List[List[float]]:
         n_fft = min(2048, len(y))
@@ -151,7 +155,7 @@ class AudioAnalysisService:
     def _generate_time_axis(self, waveform_length: int, original_length: int, sr: int) -> List[float]:
         total_duration = original_length / sr
         time_step = total_duration / waveform_length
-        return [round(i * time_step, 3) for i in range(waveform_length)]
+        return [float(round(i * time_step, 3)) for i in range(waveform_length)]
 
     def _generate_frequency_axis(self, sr: int) -> List[float]:
         n_fft = 2048
@@ -162,4 +166,82 @@ class AudioAnalysisService:
             step = len(freq_axis) // 100
             freq_axis = freq_axis[::step]
 
-        return freq_axis.tolist()
+        return [float(x) for x in freq_axis.tolist()]
+
+    def analyze_for_visualization(self, audio_file_path: str, delta: float = 1.14, wait: float = 0.03) -> Dict[str, Any]:
+        y, sr = librosa.load(audio_file_path, sr=self.sample_rate)
+
+        if len(y) < 2048:
+            raise ValueError(f"Audio file too short for analysis. Minimum duration: {2048/sr:.2f} seconds")
+
+        pitch_contour = self._extract_pitch_contour(y, sr)
+        onsets = self._extract_onsets(y, sr, delta, wait)
+        waveform = self._prepare_waveform_data(y)
+        waveform_times = self._generate_time_axis(len(waveform), len(y), sr)
+
+        return self._format_for_visualization(pitch_contour, onsets, waveform, waveform_times, delta, wait, sr)
+
+    def _format_for_visualization(
+        self,
+        pitch_contour: List[Dict[str, Any]],
+        onsets: List[Dict[str, Any]],
+        waveform: List[float],
+        waveform_times: List[float],
+        delta: float,
+        wait: float,
+        sample_rate: int
+    ) -> Dict[str, Any]:
+
+        # Convert pitch contour to [time, frequency] pairs with null for gaps
+        formatted_pitch = self._format_pitch_contour_for_visualization(pitch_contour)
+
+        # Extract only onset times
+        onset_times = [float(onset["time"]) for onset in onsets]
+
+        return {
+            "waveform": {
+                "data": waveform,
+                "times": waveform_times
+            },
+            "pitch_contour": formatted_pitch,
+            "onsets": onset_times,
+            "metadata": {
+                "delta": float(delta),
+                "wait": float(wait),
+                "sample_rate": int(sample_rate)
+            }
+        }
+
+    def _format_pitch_contour_for_visualization(self, pitch_contour: List[Dict[str, Any]]) -> List[List[Optional[float]]]:
+        if not pitch_contour:
+            return []
+
+        # Create continuous time series with null for missing pitches
+        result = []
+
+        # Find the time range
+        if pitch_contour:
+            start_time = pitch_contour[0]["time"]
+            end_time = pitch_contour[-1]["time"]
+
+            # Create time grid with 0.05 second intervals
+            time_step = 0.05
+            current_time = start_time
+            pitch_index = 0
+
+            while current_time <= end_time:
+                # Find closest pitch data point
+                closest_pitch = None
+
+                # Look for pitch within small time window
+                for i in range(pitch_index, len(pitch_contour)):
+                    if abs(pitch_contour[i]["time"] - current_time) <= time_step / 2:
+                        closest_pitch = pitch_contour[i]["frequency"]
+                        break
+                    elif pitch_contour[i]["time"] > current_time + time_step / 2:
+                        break
+
+                result.append([float(round(current_time, 3)), float(closest_pitch) if closest_pitch is not None else None])
+                current_time += time_step
+
+        return result

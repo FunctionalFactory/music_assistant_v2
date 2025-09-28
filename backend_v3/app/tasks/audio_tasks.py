@@ -5,12 +5,12 @@ from ..services.audio_analysis import AudioAnalysisService
 
 
 @celery_app.task(bind=True)
-def analyze_audio_async(self, audio_file_path: str):
+def analyze_audio_async(self, audio_file_path: str, delta: float = 1.14, wait: float = 0.03):
     try:
         current_task.update_state(state='PROCESSING')
 
         audio_service = AudioAnalysisService()
-        result = audio_service.analyze_vocal_melody(audio_file_path)
+        result = audio_service.analyze_for_visualization(audio_file_path, delta=delta, wait=wait)
 
         os.unlink(audio_file_path)
 
