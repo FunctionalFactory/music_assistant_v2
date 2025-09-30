@@ -1,0 +1,17 @@
+from celery import Celery
+
+celery_app = Celery(
+    "music_assistant_v4",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/0",
+    include=["app.tasks.audio_tasks"]
+)
+
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    result_expires=3600,
+)

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicXML 뷰어 - Music Assistant v3</title>
+    <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.5/build/opensheetmusicdisplay.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .file-input {
+            margin: 10px;
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #musicContainer {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            min-height: 400px;
+            background: white;
+            overflow: auto;
+        }
+        .info {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .error {
+            background: #ffe7e7;
+            border: 1px solid #ffb3b3;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎼 MusicXML 뷰어</h1>
+            <p>Music Assistant v3에서 생성된 악보를 확인하세요</p>
+        </div>
+
+        <div class="controls">
+            <div class="file-input">
+                <label for="musicxmlFile">
+                    📁 MusicXML 파일 선택:
+                    <input type="file" id="musicxmlFile" accept=".musicxml,.xml" />
+                </label>
+            </div>
+            <br>
+            <button onclick="loadDefaultFile()">🎵 테스트 파일 로드</button>
+            <button onclick="clearDisplay()">🗑️ 초기화</button>
+        </div>
+
+        <div id="infoMessage" class="info" style="display: none;"></div>
+        <div id="errorMessage" class="error" style="display: none;"></div>
+
+        <div id="musicContainer">
+            <p style="text-align: center; color: #666; margin-top: 100px;">
+                악보가 여기에 표시됩니다.<br>
+                위에서 MusicXML 파일을 선택하거나 "테스트 파일 로드"를 클릭하세요.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        let osmd = null;
+
+        // OSMD 초기화
+        function initializeOSMD() {
+            try {
+                osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("musicContainer", {
+                    autoResize: true,
+                    backend: "svg",
+                    drawTitle: true,
+                    drawComposer: true,
+                    drawPartNames: true,
+                    coloringEnabled: true,
+                    defaultColorNotehead: "#0066cc",
+                    defaultColorStem: "#0066cc"
+                });
+                console.log("OSMD 초기화 완료");
+            } catch (error) {
+                console.error("OSMD 초기화 실패:", error);
+                showError("OSMD 라이브러리 로드에 실패했습니다. 페이지를 새로고침해보세요.");
+            }
+        }
+
+        // 파일 입력 이벤트
+        document.getElementById('musicxmlFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                loadMusicXMLFile(file);
+            }
+        });
+
+        // MusicXML 파일 로드
+        function loadMusicXMLFile(file) {
+            if (!osmd) {
+                showError("OSMD가 초기화되지 않았습니다.");
+                return;
+            }
+
+            showInfo("파일을 로드하는 중...");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const musicXMLContent = e.target.result;
+                    loadMusicXMLContent(musicXMLContent);
+                } catch (error) {
+                    showError("파일 읽기 실패: " + error.message);
+                }
+            };
+            reader.onerror = function() {
+                showError("파일을 읽을 수 없습니다.");
+            };
+            reader.readAsText(file);
+        }
+
+        // MusicXML 내용 로드 및 렌더링
+        async function loadMusicXMLContent(content) {
+            try {
+                hideMessages();
+                showInfo("악보를 렌더링하는 중...");
+
+                await osmd.load(content);
+                osmd.render();
+
+                hideMessages();
+                showInfo("✅ 악보 로드 완료! 생성된 음표: " + countNotes(content));
+            } catch (error) {
+                console.error("MusicXML 로드 오류:", error);
+                showError("악보 렌더링 실패: " + error.message);
+            }
+        }
+
+        // 기본 테스트 파일 로드
+        async function loadDefaultFile() {
+            try {
+                showInfo("테스트 파일을 로드하는 중...");
+
+                const response = await fetch('./test_output.musicxml');
+                if (!response.ok) {
+                    throw new Error("테스트 파일을 찾을 수 없습니다. test_output.musicxml이 같은 폴더에 있는지 확인하세요.");
+                }
+
+                const musicXMLContent = await response.text();
+                await loadMusicXMLContent(musicXMLContent);
+            } catch (error) {
+                showError("테스트 파일 로드 실패: " + error.message);
+                console.error(error);
+            }
+        }
+
+        // 화면 초기화
+        function clearDisplay() {
+            if (osmd) {
+                osmd.clear();
+            }
+            document.getElementById('musicContainer').innerHTML =
+                '<p style="text-align: center; color: #666; margin-top: 100px;">' +
+                '악보가 여기에 표시됩니다.<br>' +
+                '위에서 MusicXML 파일을 선택하거나 "테스트 파일 로드"를 클릭하세요.' +
+                '</p>';
+            hideMessages();
+        }
+
+        // 음표 개수 계산
+        function countNotes(content) {
+            const noteMatches = content.match(/<note>/g);
+            return noteMatches ? noteMatches.length : 0;
+        }
+
+        // 메시지 표시 함수들
+        function showInfo(message) {
+            hideMessages();
+            const infoElement = document.getElementById('infoMessage');
+            infoElement.textContent = message;
+            infoElement.style.display = 'block';
+        }
+
+        function showError(message) {
+            hideMessages();
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
+        function hideMessages() {
+            document.getElementById('infoMessage').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // 페이지 로드 시 OSMD 초기화
+        window.addEventListener('load', function() {
+            initializeOSMD();
+        });
+    </script>
+</body>
+</html>

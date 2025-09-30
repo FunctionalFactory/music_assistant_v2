@@ -43,3 +43,9 @@ class TaskStatusResponse(BaseModel):
     status: TaskStatus
     result: Optional[VisualizationData] = None
     error: Optional[str] = None
+
+
+# Note: MusicXML endpoint returns raw XML string with appropriate content-type
+# via FastAPI Response object, so no additional Pydantic model is needed.
+# Endpoint: GET /api/v3/analysis/{task_id}/musicxml
+# Content-Type: application/vnd.recordare.musicxml+xml

@@ -1,6 +1,6 @@
 import librosa
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 
 class AudioAnalysisService:
@@ -245,3 +245,64 @@ class AudioAnalysisService:
                 current_time += time_step
 
         return result
+
+    def _extract_tempo_and_beats(self, y: np.ndarray, sr: int) -> Dict[str, Any]:
+        """
+        Extract tempo and beat tracking information using librosa.beat.beat_track.
+        Considers expressive tempo variations (rubato) in human performance.
+        """
+        try:
+            # Extract tempo and beat frames
+            tempo, beat_frames = librosa.beat.beat_track(
+                y=y,
+                sr=sr,
+                hop_length=512,
+                start_bpm=120.0,  # Initial tempo guess
+                tightness=100,    # Allow for tempo variations
+                trim=True,        # Trim silence
+                units='frames'
+            )
+
+            # Convert beat frames to time
+            beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=512)
+
+            # Calculate dynamic tempo variations
+            tempo_curve = self._calculate_dynamic_tempo(beat_times)
+
+            return {
+                "global_tempo": float(tempo),
+                "beat_times": [float(t) for t in beat_times],
+                "tempo_curve": tempo_curve,
+                "beat_count": len(beat_times)
+            }
+
+        except Exception as e:
+            # Fallback to default values if beat tracking fails
+            return {
+                "global_tempo": 120.0,
+                "beat_times": [],
+                "tempo_curve": [],
+                "beat_count": 0,
+                "error": f"Beat tracking failed: {str(e)}"
+            }
+
+    def _calculate_dynamic_tempo(self, beat_times: np.ndarray) -> List[Dict[str, float]]:
+        """
+        Calculate tempo variations over time for rubato detection.
+        """
+        if len(beat_times) < 2:
+            return []
+
+        tempo_curve = []
+
+        # Calculate instantaneous tempo between consecutive beats
+        for i in range(len(beat_times) - 1):
+            time_interval = beat_times[i + 1] - beat_times[i]
+            if time_interval > 0:
+                instantaneous_tempo = 60.0 / time_interval  # BPM
+                tempo_curve.append({
+                    "time": float(beat_times[i]),
+                    "tempo": float(instantaneous_tempo)
+                })
+
+        return tempo_curve
