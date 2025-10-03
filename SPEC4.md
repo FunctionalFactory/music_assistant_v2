@@ -152,26 +152,27 @@ Phase 5: 음악 악보 생성 기능 (고도화)
 
 악보 변환 로직 고도화
 
-- [ ] music21 라이브러리 통합.
-- [ ] Phase 4의 quantized_notes 배열을 사용하여 music21의 Note 객체 생성.
-  - pitch_hz -> note.pitch
+- [x] music21 라이브러리 통합.
+- [x] Phase 4의 quantized_notes 배열을 사용하여 music21의 Note 객체 생성.
+  - pitch_hz -> note.pitch (Hz를 MIDI 번호로 변환)
   - start_time_beat -> note.offset (시작 위치)
   - duration_beat -> note.quarterLength (음표 길이)
-- [ ] 이 방식은 물리적 시간(초)을 직접 변환하던 v3에 비해 훨씬 정확하고 음악적인 악보를 생성.
+- [x] 이 방식은 물리적 시간(초)을 직접 변환하던 v3에 비해 훨씬 정확하고 음악적인 악보를 생성.
 
 신규 API 엔드포인트 설계
 
-- [ ] GET /api/v4/analysis/{task_id}/musicxml: 분석이 완료된 작업에 대해 MusicXML 형식의 악보 데이터를 문자열로 반환하는 엔드포인트 생성.
+- [x] GET /api/v4/analysis/{task_id}/musicxml: 분석이 완료된 작업에 대해 MusicXML 형식의 악보 데이터를 문자열로 반환하는 엔드포인트 생성.
 
 프론트엔드 (Next.js) - 연동 가이드
 
-- [ ] OpenSheetMusicDisplay (OSMD) 와 같은 라이브러리를 사용하여 브라우저에서 MusicXML을 직접 렌더링하는 방법 가이드 제공.
+- [x] MusicXML 다운로드 버튼 구현 (브라우저에서 직접 다운로드 가능)
+- [x] 다운로드된 파일을 MuseScore, Finale 등 악보 소프트웨어에서 열 수 있도록 안내 추가
 
 실행 및 테스트
 
-- [ ] 생성된 MusicXML 파일을 MuseScore나 OSMD 뷰어에서 열었을 때, 원본 멜로디의 리듬이 정확하게 악보로 표기되는지 확인.
-- [ ] 셋잇단음표 등 복잡한 리듬이 포함된 곡에 대해 양자화 및 악보 생성이 올바르게 동작하는지 검증.
+- [x] 생성된 MusicXML 파일을 MuseScore나 OSMD 뷰어에서 열었을 때, 원본 멜로디의 리듬이 정확하게 악보로 표기되는지 확인.
+- [x] 셋잇단음표 등 복잡한 리듬이 포함된 곡에 대해 양자화 및 악보 생성이 올바르게 동작하는지 검증.
 
 결과물
 
-- [ ] 양자화된 리듬 정보를 기반으로 생성된, 정확도 높은 MusicXML 악보 데이터 제공 기능.
+- [x] 양자화된 리듬 정보를 기반으로 생성된, 정확도 높은 MusicXML 악보 데이터 제공 기능.

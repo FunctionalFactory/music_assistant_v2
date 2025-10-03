@@ -1,10 +1,12 @@
 import os
 import tempfile
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi.responses import Response
 
 from ..models.response_models import TaskResponse, TaskStatusResponse, TaskStatus
 from ..tasks.audio_tasks import analyze_audio_async
 from ..celery_app import celery_app
+from ..services.musicxml_service import MusicXMLService
 
 router = APIRouter()
 
@@ -134,4 +136,71 @@ async def get_task_status(task_id: str):
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving task status: {str(e)}"
+        )
+
+
+@router.get("/api/v4/analysis/{task_id}/musicxml")
+async def get_musicxml(task_id: str):
+    """
+    Generate and download MusicXML file for completed analysis.
+
+    Args:
+        task_id: Analysis task ID
+
+    Returns:
+        MusicXML file as downloadable attachment
+    """
+    try:
+        # Get task result
+        task_result = celery_app.AsyncResult(task_id)
+
+        # Check if task is completed
+        if task_result.state != 'SUCCESS':
+            raise HTTPException(
+                status_code=400,
+                detail=f"Task not completed. Current status: {task_result.state}"
+            )
+
+        # Get analysis result
+        result = task_result.result
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="Analysis result not found"
+            )
+
+        # Extract required data
+        quantized_notes = result.get("rhythm_info", {}).get("quantized_notes", [])
+        bpm = result.get("rhythm_info", {}).get("bpm", 120.0)
+        metadata = result.get("metadata", {})
+
+        if not quantized_notes:
+            raise HTTPException(
+                status_code=400,
+                detail="No quantized notes available for MusicXML generation"
+            )
+
+        # Generate MusicXML
+        musicxml_service = MusicXMLService()
+        musicxml_string = musicxml_service.generate_musicxml(
+            quantized_notes=quantized_notes,
+            bpm=bpm,
+            metadata=metadata
+        )
+
+        # Return as downloadable file
+        return Response(
+            content=musicxml_string,
+            media_type="application/vnd.recordare.musicxml+xml",
+            headers={
+                "Content-Disposition": f"attachment; filename=melody_{task_id[:8]}.musicxml"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating MusicXML: {str(e)}"
         )

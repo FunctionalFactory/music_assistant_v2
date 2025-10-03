@@ -6,3 +6,4 @@ librosa>=0.10.0
 numpy>=1.26.0
 python-multipart>=0.0.6
 pydantic>=2.5.0
+music21>=9.1.0
